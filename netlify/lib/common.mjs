@@ -9,6 +9,7 @@ export const round2 = (v) => Math.round(Number(v || 0) * 100) / 100;
 export const siteUrl = () => String(process.env.SITE_URL || process.env.URL || "").replace(/\/+$/, "");
 export const charges = () => getStore({ name: "charges", consistency: "strong" });
 export const items = () => getStore({ name: "items", consistency: "strong" });
+export const customers = () => getStore({ name: "customers", consistency: "strong" });
 export const claims = () => getStore({ name: "claims", consistency: "strong" });
 
 /* ---------------- sign-in: one password, signed 30-day token ---------------- */
@@ -170,4 +171,31 @@ export async function issueInvoice(id) {
     await claims().delete(id + ":invoice");
   }
   return out;
+}
+
+/* ---------------- the page learns: items and customers are remembered as they are used ---------------- */
+const norm = (s) => String(s || "").trim().replace(/\s+/g, " ").toLowerCase();
+
+/* Every item typed on a charge is kept with its latest price, so next time it is
+   one pick away. A known item gets the newest price and one more use. */
+export async function learnItems(lines) {
+  const store = items();
+  const list = (await store.get("all", { type: "json" })) || [];
+  for (const l of lines) {
+    const hit = list.find((i) => norm(i.name) === norm(l.name));
+    if (hit) { hit.price = l.price; hit.uses = (hit.uses || 0) + 1; hit.last = Date.now(); if (l.sku && !hit.sku) hit.sku = l.sku; }
+    else list.push({ name: l.name, sku: l.sku || "", price: l.price, uses: 1, last: Date.now() });
+  }
+  await store.setJSON("all", list.slice(0, 5000));
+}
+
+/* The same for the people charged: name, mobile and email. */
+export async function learnCustomer({ name, phone, email }) {
+  if (!norm(name)) return;
+  const store = customers();
+  const list = (await store.get("all", { type: "json" })) || [];
+  const hit = list.find((c) => norm(c.name) === norm(name));
+  if (hit) { if (phone) hit.phone = phone; if (email) hit.email = email; hit.uses = (hit.uses || 0) + 1; hit.last = Date.now(); }
+  else list.push({ name: String(name).trim(), phone: phone || "", email: email || "", uses: 1, last: Date.now() });
+  await store.setJSON("all", list.slice(0, 5000));
 }

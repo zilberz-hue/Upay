@@ -64,7 +64,7 @@ td,th{padding:6px;border-bottom:1px solid var(--line);text-align:right}
   <section id="paneCharge" style="display:flex;flex-direction:column;gap:14px">
     <form class="card" id="chargeForm">
       <div class="grid">
-        <div><label for="cname">שם הלקוח</label><input id="cname" autocomplete="off"></div>
+        <div><label for="cname">שם הלקוח</label><input id="cname" list="custList" autocomplete="off" placeholder="הקלד או בחר לקוח קודם"><datalist id="custList"></datalist></div>
         <div><label for="cphone">נייד (לשליחה בוואטסאפ)</label><input id="cphone" dir="ltr" inputmode="tel" autocomplete="off"></div>
       </div>
       <div><label for="cemail">מייל (החשבונית נשלחת אליו, לא חובה)</label><input id="cemail" dir="ltr" inputmode="email" autocomplete="off"></div>
@@ -95,8 +95,8 @@ td,th{padding:6px;border-bottom:1px solid var(--line);text-align:right}
 
   <section id="paneItems" style="display:none;flex-direction:column;gap:14px">
     <div class="card">
-      <b>ייבוא פריטים</b>
-      <span class="mute">קובץ אקסל או CSV עם עמודות שם, מק"ט ומחיר (למשל ייצוא הפריטים מ-iCount). זה מחליף את הרשימה הקיימת.</span>
+      <b>הרשימה לומדת לבד</b>
+      <span class="mute">כל פריט שאתה מקליד בחיוב נשמר עם המחיר האחרון, בפעם הבאה מספיק לבחור אותו. כאן אפשר לתקן מחירים ולמחוק פריטים. אם יש לך קובץ, אפשר גם לייבא אותו (שם, מק"ט, מחיר), וזה מחליף את הרשימה.</span>
       <input type="file" id="file" accept=".xlsx,.xls,.csv">
       <label style="display:flex;gap:8px;align-items:center;font-weight:400"><input type="checkbox" id="preVat" style="width:auto"> המחירים בקובץ הם לפני מע"מ</label>
       <div class="mute" id="importMsg"></div>
@@ -116,7 +116,7 @@ var $=function(id){return document.getElementById(id)};
 var esc=function(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})};
 var money=function(n){return '₪'+Number(n||0).toLocaleString('he-IL',{maximumFractionDigits:2})};
 var token='';try{token=localStorage.getItem('cd_token')||''}catch(e){}
-var state={items:[],lines:[],cfg:{vat:18}};
+var state={items:[],customers:[],lines:[],cfg:{vat:18}};
 
 function api(action,data){
   return fetch('/.netlify/functions/api',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify(Object.assign({action:action},data||{}))})
@@ -148,9 +148,25 @@ function boot(){
     if(!c.icount)w.push('iCount לא מחובר: חסרים ICOUNT_CID, ICOUNT_USER ו-ICOUNT_PASS ב-Netlify.');
     $('cfgWarn').hidden=!w.length;$('cfgWarn').textContent=w.join(' ');
   }).catch(function(){});
-  api('items').then(function(d){state.items=d.items||[];renderItems();if(!state.lines.length)addLine()}).catch(function(){});
+  loadLearned().then(function(){if(!state.lines.length)addLine()});
   loadList();
 }
+
+/* ---------- what the page has learned ---------- */
+function byUse(a,b){return (b.uses||0)-(a.uses||0)||(b.last||0)-(a.last||0)}
+function loadLearned(){
+  return Promise.all([api('items'),api('customers')]).then(function(r){
+    state.items=(r[0].items||[]).sort(byUse);state.customers=(r[1].customers||[]).sort(byUse);
+    renderItems();renderCustomers();
+  }).catch(function(){});
+}
+function renderCustomers(){
+  $('custList').innerHTML=state.customers.map(function(c){return '<option value="'+esc(c.name)+'">'+esc(c.phone||'')+'</option>'}).join('');
+}
+$('cname').addEventListener('input',function(){
+  var c=state.customers.find(function(x){return x.name===$('cname').value});
+  if(c){if(c.phone)$('cphone').value=c.phone;if(c.email)$('cemail').value=c.email}
+});
 
 /* ---------- charge form ---------- */
 function addLine(){state.lines.push({name:'',sku:'',qty:1,price:''});renderLines()}
@@ -193,7 +209,7 @@ $('chargeForm').addEventListener('submit',function(e){
      var who=$('cname').value.trim();
      var msg=(who?'שלום '+who+', ':'שלום, ')+'קישור לתשלום '+money(d.total)+' עבור '+d.description+':\n'+d.url;
      $('wa').href='https://wa.me/'+(ph||'')+'?text='+encodeURIComponent(msg);
-     $('linkBox').hidden=false;loadList();
+     $('linkBox').hidden=false;loadList();loadLearned();
    }).catch(function(){er.textContent='שגיאת רשת, נסה שוב';er.hidden=false})
    .then(function(){b.disabled=false;b.textContent='צור קישור תשלום'});
 });
@@ -204,7 +220,7 @@ $('paidBtn').onclick=function(){
    .then(function(d){
      if(!d.ok){er.textContent=d.reason||'שגיאה';er.hidden=false;return}
      m.textContent=d.invoice&&d.invoice.ok?'הופקה חשבונית '+d.invoice.number:'החיוב נשמר, אך החשבונית לא הופקה: '+((d.invoice&&d.invoice.reason)||'')+' (אפשר לנסות שוב ברשימה למטה)';
-     loadList();
+     loadList();loadLearned();
    }).catch(function(){er.textContent='שגיאת רשת, נסה שוב';er.hidden=false})
    .then(function(){b.disabled=false;b.textContent='כבר שולם · הפק חשבונית'});
 };
@@ -239,7 +255,7 @@ $('list').addEventListener('click',function(e){
 function renderItems(){
   $('itemsCount').textContent='פריטים ('+state.items.length+')';
   $('itemsBody').innerHTML=state.items.map(function(it,i){
-    return '<tr><td><input value="'+esc(it.name)+'" data-i="'+i+'" data-f="name" aria-label="שם"></td><td><input value="'+esc(it.sku)+'" data-i="'+i+'" data-f="sku" aria-label="מקט"></td>'
+    return '<tr><td><input value="'+esc(it.name)+'" data-i="'+i+'" data-f="name" aria-label="שם"><div class="mute">'+(it.uses?'נעשה בו שימוש '+it.uses+' פעמים':'')+'</div></td><td><input value="'+esc(it.sku)+'" data-i="'+i+'" data-f="sku" aria-label="מקט"></td>'
      +'<td><input value="'+esc(it.price)+'" dir="ltr" inputmode="decimal" data-i="'+i+'" data-f="price" aria-label="מחיר"></td><td><button class="ghost sm" data-d="'+i+'">מחק</button></td></tr>';
   }).join('');
   if($('lines').children.length)renderLinesKeep();

@@ -1,6 +1,6 @@
 /* The owner's API: items, charges, confirmation. Every call needs the signed token. */
 import crypto from "node:crypto";
-import { json, isAdmin, charges, items, claims, round2, siteUrl, upayCreds, upayCreatePage, icountReady, vatRate, issueInvoice } from "../lib/common.mjs";
+import { json, isAdmin, charges, items, customers, claims, learnItems, learnCustomer, round2, siteUrl, upayCreds, upayCreatePage, icountReady, vatRate, issueInvoice } from "../lib/common.mjs";
 
 const clean = (s, n) => String(s ?? "").trim().slice(0, n);
 
@@ -21,9 +21,20 @@ export default async (req) => {
       const list = (await items().get("all", { type: "json" })) || [];
       return json({ ok: true, items: list });
     }
+    case "customers": {
+      const list = (await customers().get("all", { type: "json" })) || [];
+      return json({ ok: true, customers: list });
+    }
+    case "customers-save": {
+      const list = (Array.isArray(b.customers) ? b.customers : []).slice(0, 5000).map((c) => ({
+        name: clean(c.name, 120), phone: clean(c.phone, 30), email: clean(c.email, 120), uses: Number(c.uses) || 0, last: Number(c.last) || 0,
+      })).filter((c) => c.name);
+      await customers().setJSON("all", list);
+      return json({ ok: true, count: list.length });
+    }
     case "items-save": {
       const list = (Array.isArray(b.items) ? b.items : []).slice(0, 5000).map((i) => ({
-        name: clean(i.name, 120), sku: clean(i.sku, 40), price: round2(i.price),
+        name: clean(i.name, 120), sku: clean(i.sku, 40), price: round2(i.price), uses: Number(i.uses) || 0, last: Number(i.last) || 0,
       })).filter((i) => i.name);
       await items().setJSON("all", list);
       return json({ ok: true, count: list.length });
@@ -39,6 +50,9 @@ export default async (req) => {
       const name = clean(b.name, 120), email = clean(b.email, 120), phone = clean(b.phone, 30);
       if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json({ ok: false, reason: "כתובת המייל אינה תקינה" });
       const description = clean(b.description, 120) || lines.map((l) => (l.qty !== 1 ? `${l.name} x${l.qty}` : l.name)).join(", ").slice(0, 120);
+
+      /* Remember what was typed, so the next charge is one pick away. */
+      try { await learnItems(lines); await learnCustomer({ name, phone, email }); } catch (e) { console.warn("learn failed:", e.message); }
 
       /* Already paid elsewhere (cash, Bit, a transfer, a card taken some other
          way): no payment link, the charge is recorded as paid and the invoice
