@@ -1,0 +1,8 @@
+{
+  "name": "upay-charge-desk",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "dependencies": { "@netlify/blobs": "^11.1.3" }
+}
