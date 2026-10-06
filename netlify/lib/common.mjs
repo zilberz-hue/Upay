@@ -101,6 +101,19 @@ export function netOf(gross, rate) {
 }
 export const icountReady = () => Boolean(process.env.ICOUNT_CID && process.env.ICOUNT_USER && process.env.ICOUNT_PASS);
 
+/* How the money arrived, as iCount wants it: each method an object at the root
+   of the request. A card is the default (a uPay charge); Bit and cash are
+   recorded as cash; a bank transfer needs the account's id in iCount. */
+function payPart(method, sum, date) {
+  if (method === "bank") {
+    const account = String(process.env.ICOUNT_BANK_ACCOUNT || "").trim();
+    if (!account) return { __missing: "להעברה בנקאית חסר מזהה חשבון הבנק ב-iCount (ICOUNT_BANK_ACCOUNT ב-Netlify)." };
+    return { bank_transfer: { sum, date, account: Number(account) || account } };
+  }
+  if (method === "cash") return { cash: { sum } };
+  return { cc: { sum, date, num_of_payments: 1 } };
+}
+
 /* One tax invoice-receipt (invrec) with a line per item, paid by card. */
 export async function icountInvoice(c) {
   if (!icountReady()) return { ok: false, reason: "iCount לא מחובר: חסרים מזהה חברה, משתמש או סיסמה ב-Netlify." };
@@ -124,11 +137,12 @@ export async function icountInvoice(c) {
      charge at most): a payment that disagrees with the document is refused. */
   const sum = round2(lines.reduce((a, l) => a + l.unitprice * l.quantity, 0) * (1 + rate / 100));
   const date = new Date().toISOString().slice(0, 10);
+  if (payPart(c.method, sum, date).__missing) return { ok: false, reason: payPart(c.method, sum, date).__missing };
   const r = await fetch(`${base}/doc/create`, { method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       sid, doctype: "invrec", client_name: c.name || "",
       email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.email || "") ? c.email : undefined,
-      items: lines, cc: { sum, date, num_of_payments: 1 },
+      items: lines, ...payPart(c.method, sum, date),
       hwc: c.id ? `חיוב ${c.id}` : undefined,
       send_email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.email || "") ? 1 : 0,
     }) });

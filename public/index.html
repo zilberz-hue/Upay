@@ -73,7 +73,16 @@ td,th{padding:6px;border-bottom:1px solid var(--line);text-align:right}
       <div><label for="cdesc">תיאור בחשבונית (נבנה לבד מהפריטים, אפשר לשנות)</label><input id="cdesc" autocomplete="off"></div>
       <div class="total"><span>סה"כ לתשלום</span><span id="total">₪0</span></div>
       <div class="err" id="chargeErr" hidden></div>
-      <div><button type="submit" id="createBtn">צור קישור תשלום</button></div>
+      <div class="acts"><button type="submit" id="createBtn">צור קישור תשלום</button></div>
+      <div class="card" style="background:var(--bg)">
+        <b>הלקוח כבר שילם?</b>
+        <span class="mute">אם התשלום כבר בוצע (בכל דרך), מלא את הפרטים למעלה, בחר איך שילם ולחץ. תצא חשבונית מיד.</span>
+        <div class="grid">
+          <div><label for="cmethod">איך שולם</label><select id="cmethod"><option value="cc">כרטיס אשראי</option><option value="cash">ביט / מזומן</option><option value="bank">העברה בנקאית</option></select></div>
+          <div style="align-self:end"><button type="button" class="ghost" id="paidBtn">כבר שולם · הפק חשבונית</button></div>
+        </div>
+        <div class="mute" id="paidMsg"></div>
+      </div>
       <div class="link" id="linkBox" hidden>
         <b>הקישור מוכן. שלח אותו ללקוח</b>
         <code id="linkUrl"></code>
@@ -188,6 +197,17 @@ $('chargeForm').addEventListener('submit',function(e){
    }).catch(function(){er.textContent='שגיאת רשת, נסה שוב';er.hidden=false})
    .then(function(){b.disabled=false;b.textContent='צור קישור תשלום'});
 });
+$('paidBtn').onclick=function(){
+  var b=this,er=$('chargeErr'),m=$('paidMsg');er.hidden=true;m.textContent='';b.disabled=true;b.textContent='מפיק...';
+  api('create',{alreadyPaid:true,method:$('cmethod').value,name:$('cname').value,phone:$('cphone').value,email:$('cemail').value,description:$('cdesc').value,
+    lines:state.lines.map(function(l){return {name:l.name,sku:l.sku,qty:num(l.qty),price:num(l.price)}})})
+   .then(function(d){
+     if(!d.ok){er.textContent=d.reason||'שגיאה';er.hidden=false;return}
+     m.textContent=d.invoice&&d.invoice.ok?'הופקה חשבונית '+d.invoice.number:'החיוב נשמר, אך החשבונית לא הופקה: '+((d.invoice&&d.invoice.reason)||'')+' (אפשר לנסות שוב ברשימה למטה)';
+     loadList();
+   }).catch(function(){er.textContent='שגיאת רשת, נסה שוב';er.hidden=false})
+   .then(function(){b.disabled=false;b.textContent='כבר שולם · הפק חשבונית'});
+};
 $('copyLink').onclick=function(){var t=$('linkUrl').textContent,b=this;
   try{navigator.clipboard.writeText(t).then(function(){b.textContent='הועתק'},function(){sel()})}catch(e){sel()}
   function sel(){var r=document.createRange();r.selectNodeContents($('linkUrl'));var s=getSelection();s.removeAllRanges();s.addRange(r);b.textContent='סמן והעתק'}};

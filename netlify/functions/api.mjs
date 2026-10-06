@@ -40,6 +40,19 @@ export default async (req) => {
       if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json({ ok: false, reason: "כתובת המייל אינה תקינה" });
       const description = clean(b.description, 120) || lines.map((l) => (l.qty !== 1 ? `${l.name} x${l.qty}` : l.name)).join(", ").slice(0, 120);
 
+      /* Already paid elsewhere (cash, Bit, a transfer, a card taken some other
+         way): no payment link, the charge is recorded as paid and the invoice
+         is issued at once. */
+      if (b.alreadyPaid) {
+        const method = ["cc", "cash", "bank"].includes(b.method) ? b.method : "cc";
+        const id = crypto.randomBytes(5).toString("hex");
+        await store.setJSON(id, { name, email, phone, lines, total, description, status: "paid", manual: true, method,
+          createdAt: Date.now(), paidAt: Date.now() });
+        await claims().set(id + ":paid", String(Date.now()), { onlyIfNew: true });
+        const out = await issueInvoice(id);
+        return json({ ok: true, id, paid: true, invoice: out });
+      }
+
       const u = upayCreds();
       if (!u) return json({ ok: false, reason: "uPay לא מחובר: חסר UPAY_EMAIL ב-Netlify." });
       const site = siteUrl();
