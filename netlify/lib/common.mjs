@@ -16,8 +16,8 @@ export const claims = () => getStore({ name: "claims", consistency: "strong" });
    A value set in Netlify's environment wins; otherwise the one saved from the
    Settings tab is used. Secrets are written here and never sent back: the page
    only ever sees a masked hint. */
-export const SETTING_KEYS = ["UPAY_EMAIL", "UPAY_API_KEY", "ICOUNT_CID", "ICOUNT_USER", "ICOUNT_PASS", "ICOUNT_VAT_RATE", "ICOUNT_BANK_ACCOUNT"];
-export const SECRET_KEYS = new Set(["UPAY_API_KEY", "ICOUNT_PASS"]);
+export const SETTING_KEYS = ["UPAY_EMAIL", "ICOUNT_CID", "ICOUNT_USER", "ICOUNT_PASS", "ICOUNT_VAT_RATE"];
+export const SECRET_KEYS = new Set(["ICOUNT_PASS"]);
 const settingsStore = () => getStore({ name: "settings", consistency: "strong" });
 const FROM_NETLIFY = {};
 for (const k of [...SETTING_KEYS, "ADMIN_PASSWORD"]) FROM_NETLIFY[k] = process.env[k];
@@ -175,13 +175,8 @@ export const icountReady = () => Boolean(process.env.ICOUNT_CID && process.env.I
 
 /* How the money arrived, as iCount wants it: each method an object at the root
    of the request. A card is the default (a uPay charge); Bit and cash are
-   recorded as cash; a bank transfer needs the account's id in iCount. */
+   recorded as cash. */
 function payPart(method, sum, date) {
-  if (method === "bank") {
-    const account = String(process.env.ICOUNT_BANK_ACCOUNT || "").trim();
-    if (!account) return { __missing: "להעברה בנקאית חסר מזהה חשבון הבנק ב-iCount (אפשר להזין בלשונית הגדרות)." };
-    return { bank_transfer: { sum, date, account: Number(account) || account } };
-  }
   if (method === "cash") return { cash: { sum } };
   return { cc: { sum, date, num_of_payments: 1 } };
 }
@@ -209,7 +204,6 @@ export async function icountInvoice(c) {
      charge at most): a payment that disagrees with the document is refused. */
   const sum = round2(lines.reduce((a, l) => a + l.unitprice * l.quantity, 0) * (1 + rate / 100));
   const date = new Date().toISOString().slice(0, 10);
-  if (payPart(c.method, sum, date).__missing) return { ok: false, reason: payPart(c.method, sum, date).__missing };
   const r = await fetch(`${base}/doc/create`, { method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       sid, doctype: "invrec", client_name: c.name || "",

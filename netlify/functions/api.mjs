@@ -73,7 +73,7 @@ export default async (req) => {
          way): no payment link, the charge is recorded as paid and the invoice
          is issued at once. */
       if (b.alreadyPaid) {
-        const method = ["cc", "cash", "bank"].includes(b.method) ? b.method : "cc";
+        const method = ["cc", "cash"].includes(b.method) ? b.method : "cc";
         const id = crypto.randomBytes(5).toString("hex");
         await store.setJSON(id, { name, email, phone, lines, total, description, status: "paid", manual: true, method,
           createdAt: Date.now(), paidAt: Date.now() });

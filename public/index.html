@@ -101,7 +101,7 @@ button.wide{width:100%;padding:11px 16px;font-size:16px}
         <b>הלקוח כבר שילם?</b>
         <span class="mute">אם התשלום כבר בוצע (בכל דרך), מלא את הפרטים למעלה, בחר איך שילם ולחץ. תצא חשבונית מיד.</span>
         <div class="grid">
-          <div><label for="cmethod">איך שולם</label><select id="cmethod"><option value="cc">כרטיס אשראי</option><option value="cc">Apple Pay</option><option value="cc">Google Pay</option><option value="cc">uPay</option><option value="cash">ביט / מזומן</option><option value="bank">העברה בנקאית</option></select></div>
+          <div><label for="cmethod">איך שולם</label><select id="cmethod"><option value="cc">כרטיס אשראי</option><option value="cc">Apple Pay</option><option value="cc">Google Pay</option><option value="cc">uPay</option><option value="cash">ביט / מזומן</option></select></div>
           <div style="align-self:end"><button type="button" class="ghost" id="paidBtn">כבר שולם · הפק חשבונית</button></div>
         </div>
         <div class="mute" id="paidMsg"></div>
@@ -345,8 +345,8 @@ $('file').addEventListener('change',function(){
 
 /* ---------- settings (kept on the server, typed once) ---------- */
 var FIELDS={
-  sUpay:[['UPAY_EMAIL','אימייל חשבון uPay',false],['UPAY_API_KEY','מפתח API של uPay (לא חובה)',true]],
-  sIcount:[['ICOUNT_CID','מזהה חברה',false],['ICOUNT_USER','משתמש',false],['ICOUNT_PASS','סיסמה',true],['ICOUNT_VAT_RATE','אחוז מע"מ (ברירת מחדל 18, עוסק פטור 0)',false],['ICOUNT_BANK_ACCOUNT','מזהה חשבון בנק ב-iCount (להעברה בנקאית בלבד)',false]]
+  sUpay:[['UPAY_EMAIL','אימייל חשבון uPay',false]],
+  sIcount:[['ICOUNT_CID','מזהה חברה',false],['ICOUNT_USER','משתמש',false],['ICOUNT_PASS','סיסמה',true],['ICOUNT_VAT_RATE','אחוז מע"מ (ברירת מחדל 18, עוסק פטור 0)',false]]
 };
 var setDraft={};
 function loadSettingsTab(){
