@@ -123,7 +123,7 @@ input.l4{width:90px;padding:5px 8px;font-size:13.5px}
         <b>הלקוח כבר שילם?</b>
         <span class="mute">אם התשלום כבר בוצע (בכל דרך), מלא את הפרטים למעלה, בחר איך שילם ולחץ. תצא חשבונית מיד.</span>
         <div class="grid">
-          <div><label for="cmethod">איך שולם</label><select id="cmethod"><option value="cc">כרטיס אשראי</option><option value="cc">Apple Pay</option><option value="cc">Google Pay</option><option value="cc">uPay</option><option value="cash">ביט / מזומן</option></select></div>
+          <div><label for="cmethod">איך שולם</label><select id="cmethod"><option value="cc">כרטיס אשראי</option><option value="cc">Apple Pay</option><option value="cc">Google Pay</option><option value="cc">uPay</option><option value="bit">ביט</option><option value="paybox">PayBox</option><option value="cash">מזומן</option><option value="bank">העברה בנקאית</option></select></div>
           <div id="last4Wrap"><label for="clast4">4 ספרות אחרונות של הכרטיס</label><input id="clast4" dir="ltr" inputmode="numeric" maxlength="4" placeholder="1234" autocomplete="off"></div>
           <div style="align-self:end"><button type="button" class="ghost" id="paidBtn">כבר שולם · הפק חשבונית</button></div>
         </div>
@@ -306,7 +306,7 @@ $('paidBtn').onclick=function(){
   var b=this,er=$('chargeErr'),m=$('paidMsg');er.hidden=true;m.textContent='';
   if($('cmethod').value==='cc'&&!/^\d{4}$/.test($('clast4').value.trim())){er.textContent='הזן את 4 הספרות האחרונות של כרטיס האשראי';er.hidden=false;$('clast4').focus();return}
   b.disabled=true;b.textContent='מפיק...';
-  api('create',{alreadyPaid:true,method:$('cmethod').value,last4:$('clast4').value,name:$('cname').value,phone:$('cphone').value,email:$('cemail').value,description:$('cdesc').value,
+  api('create',{alreadyPaid:true,method:$('cmethod').value,methodLabel:$('cmethod').options[$('cmethod').selectedIndex].text,last4:$('clast4').value,name:$('cname').value,phone:$('cphone').value,email:$('cemail').value,description:$('cdesc').value,
     lines:state.lines.map(function(l){return {name:l.name,sku:l.sku,qty:num(l.qty),price:num(l.price)}})})
    .then(function(d){
      if(!d.ok){er.textContent=d.reason||'שגיאה';er.hidden=false;return}
@@ -395,7 +395,7 @@ function rowHtml(c,full){
   var tools=full?'<button class="ghost sm" data-edit="'+c.id+'">ערוך</button><button class="ghost sm danger" data-del="'+c.id+'">מחק</button>':'';
   var box=full?'<input type="checkbox" class="selbox" data-sel="'+c.id+'"'+(sel[c.id]?' checked':'')+' aria-label="בחר">':'';
   return '<div class="card"><div class="top"><span class="who">'+box+'<b>'+esc(c.name||'ללא שם')+'</b></span><span class="pill '+pill[0]+'">'+pill[1]+'</span></div>'
-    +'<div class="mute">'+money(c.total)+' · '+esc(c.description)+' · '+new Date(c.createdAt).toLocaleDateString('he-IL')+(c.manual?' · נרשם ידנית':'')+(c.last4?' · כרטיס ****'+esc(c.last4):'')+'</div>'
+    +'<div class="mute">'+money(c.total)+' · '+esc(c.description)+' · '+new Date(c.createdAt).toLocaleDateString('he-IL')+(c.manual?' · נרשם ידנית'+(c.methodLabel?' ('+esc(c.methodLabel)+')':''):'')+(c.last4?' · כרטיס ****'+esc(c.last4):'')+'</div>'
     +(full&&items?'<div class="mute">'+items+'</div>':'')
     +'<div class="acts">'+act+tools+'</div></div>';
 }
@@ -505,7 +505,7 @@ $('file').addEventListener('change',function(){
 /* ---------- settings (kept on the server, typed once) ---------- */
 var FIELDS={
   sUpay:[['UPAY_EMAIL','אימייל חשבון uPay',false]],
-  sIcount:[['ICOUNT_CID','מזהה חברה',false],['ICOUNT_USER','משתמש',false],['ICOUNT_PASS','סיסמה',true],['ICOUNT_VAT_RATE','אחוז מע"מ (ברירת מחדל 18, עוסק פטור 0)',false]]
+  sIcount:[['ICOUNT_CID','מזהה חברה',false],['ICOUNT_USER','משתמש',false],['ICOUNT_PASS','סיסמה',true],['ICOUNT_VAT_RATE','אחוז מע"מ (ברירת מחדל 18, עוסק פטור 0)',false],['ICOUNT_BANK_ACCOUNT','מזהה חשבון הבנק ב-iCount (נדרש רק להעברה בנקאית)',false]]
 };
 var setDraft={};
 function loadSettingsTab(){

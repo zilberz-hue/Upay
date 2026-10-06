@@ -110,11 +110,11 @@ export default async (req) => {
          way): no payment link, the charge is recorded as paid and the invoice
          is issued at once. */
       if (b.alreadyPaid) {
-        const method = ["cc", "cash"].includes(b.method) ? b.method : "cc";
+        const method = ["cc", "cash", "bit", "paybox", "bank"].includes(b.method) ? b.method : "cc";
         const last4 = clean(b.last4, 4);
         if (method === "cc" && !/^\d{4}$/.test(last4)) return json({ ok: false, reason: "הזן את 4 הספרות האחרונות של כרטיס האשראי" });
         const id = crypto.randomBytes(5).toString("hex");
-        await store.setJSON(id, { name, email, phone, lines, total, description, status: "paid", manual: true, method, last4: method === "cc" ? last4 : "",
+        await store.setJSON(id, { name, email, phone, lines, total, description, status: "paid", manual: true, method, methodLabel: clean(b.methodLabel, 40), last4: method === "cc" ? last4 : "",
           createdAt: Date.now(), paidAt: Date.now() });
         await claims().set(id + ":paid", String(Date.now()), { onlyIfNew: true });
         const out = await issueInvoice(id);
