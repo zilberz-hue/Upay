@@ -1,6 +1,6 @@
 /* The owner's API: items, charges, confirmation. Every call needs the signed token. */
 import crypto from "node:crypto";
-import { json, isAdmin, charges, items, customers, claims, learnItems, learnCustomer, round2, siteUrl, upayCreds, upayCreatePage, icountReady, vatRate, issueInvoice, SETTING_KEYS, describeSettings, saveSettings, passwordFromNetlify, changePassword } from "../lib/common.mjs";
+import { json, isAdmin, charges, items, customers, combos, claims, learnItems, learnCustomer, round2, siteUrl, upayCreds, upayCreatePage, icountReady, vatRate, issueInvoice, SETTING_KEYS, describeSettings, saveSettings, passwordFromNetlify, changePassword } from "../lib/common.mjs";
 
 const clean = (s, n) => String(s ?? "").trim().slice(0, n);
 
@@ -30,6 +30,41 @@ export default async (req) => {
         if (!(await changePassword(String(b.newPassword)))) return json({ ok: false, reason: "הסיסמה מוגדרת ב-Netlify ולא ניתן לשנות אותה מכאן" });
       }
       return json({ ok: true, settings: describeSettings() });
+    }
+
+    case "combos": {
+      const list = (await combos().get("all", { type: "json" })) || [];
+      return json({ ok: true, combos: list });
+    }
+    case "combos-save": {
+      const list = (Array.isArray(b.combos) ? b.combos : []).slice(0, 200).map((c) => ({
+        name: clean(c.name, 80),
+        items: (Array.isArray(c.items) ? c.items : []).slice(0, 40).map((i) => ({ name: clean(i.name, 120), sku: clean(i.sku, 40), price: round2(i.price), qty: Number(i.qty) || 1 })).filter((i) => i.name),
+      })).filter((c) => c.name && c.items.length);
+      await combos().setJSON("all", list);
+      return json({ ok: true, count: list.length });
+    }
+
+    /* The activity log: fix the details of a charge, or remove it. The amount is
+       not editable (the uPay page already has it); delete and create again. */
+    case "charge-update": {
+      const id = clean(b.id, 40);
+      const c = id ? await store.get(id, { type: "json" }) : null;
+      if (!c) return json({ ok: false, reason: "החיוב לא נמצא" });
+      const email = clean(b.email, 120);
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json({ ok: false, reason: "כתובת המייל אינה תקינה" });
+      const name = clean(b.name, 120), description = clean(b.description, 120);
+      if (!name) return json({ ok: false, reason: "חסר שם לקוח" });
+      await store.setJSON(id, { ...c, name, email, phone: clean(b.phone, 30), description: description || c.description });
+      return json({ ok: true });
+    }
+    case "charge-delete": {
+      const id = clean(b.id, 40);
+      if (!id) return json({ ok: false, reason: "חסר מזהה" });
+      await store.delete(id);
+      await claims().delete(id + ":paid").catch(() => {});
+      await claims().delete(id + ":invoice").catch(() => {});
+      return json({ ok: true });
     }
 
     case "items": {
@@ -103,7 +138,7 @@ export default async (req) => {
     case "list": {
       const { blobs } = await store.list();
       const all = (await Promise.all(blobs.map(async (x) => ({ id: x.key, ...(await store.get(x.key, { type: "json" })) }))))
-        .filter((c) => c && c.createdAt).sort((a, z) => z.createdAt - a.createdAt).slice(0, 60);
+        .filter((c) => c && c.createdAt).sort((a, z) => z.createdAt - a.createdAt).slice(0, 500);
       return json({ ok: true, charges: all.map(({ token, ...c }) => c) });   /* the secret token never leaves the server */
     }
 

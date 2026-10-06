@@ -59,6 +59,12 @@ td,th{padding:6px;border-bottom:1px solid var(--line);text-align:right}
 #loginForm{display:flex;flex-direction:column;gap:10px}
 .note{background:var(--rep-bg);color:var(--fg);border-radius:8px;padding:10px 12px;font-size:14px}
 button.wide{width:100%;padding:11px 16px;font-size:16px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{background:transparent;color:var(--mute);border-color:var(--line);padding:4px 12px;font-size:13.5px}
+.chips button.on{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.chk{display:flex;gap:10px;align-items:center;padding:6px 4px;font-weight:400;margin:0;border-bottom:1px solid var(--line)}
+.chk input{width:auto}
+.danger{border-color:var(--bad);color:var(--bad);background:transparent}
 [hidden]{display:none!important}
 </style>
 </head>
@@ -86,7 +92,7 @@ button.wide{width:100%;padding:11px 16px;font-size:16px}
 
 <div class="wrap" id="app" hidden>
   <div class="top"><div class="brand"><img class="logo-sm" src="logo.png" alt="TizonHealth"><h1>חיוב לקוח</h1></div><button class="ghost sm" id="logout">יציאה</button></div>
-  <div class="tabs"><button id="tCharge" class="on">חיוב</button><button id="tItems">פריטים</button><button id="tSettings">הגדרות</button></div>
+  <div class="tabs"><button id="tCharge" class="on">חיוב</button><button id="tLog">יומן</button><button id="tItems">פריטים</button><button id="tSettings">הגדרות</button></div>
   <div class="card err" id="cfgWarn" hidden></div>
 
   <section id="paneCharge" style="display:flex;flex-direction:column;gap:14px">
@@ -97,7 +103,15 @@ button.wide{width:100%;padding:11px 16px;font-size:16px}
       </div>
       <div><label for="cemail">מייל (החשבונית נשלחת אליו, לא חובה)</label><input id="cemail" dir="ltr" inputmode="email" autocomplete="off"></div>
       <div id="lines" style="display:flex;flex-direction:column;gap:10px"></div>
-      <div class="acts"><button type="button" class="ghost sm" id="addLine">+ הוסף פריט</button></div>
+      <div class="acts"><button type="button" class="ghost sm" id="addLine">+ הוסף פריט</button><button type="button" class="ghost sm" id="openMulti">בחר כמה פריטים</button>
+        <select id="comboSel" aria-label="שילובים שמורים" style="width:auto;flex:1;min-width:160px"><option value="">הוסף שילוב שמור...</option></select></div>
+      <div class="card" id="multiBox" hidden style="background:var(--bg)">
+        <input id="multiSearch" placeholder="חפש פריט" autocomplete="off">
+        <div id="multiList" class="scroll" style="max-height:260px;display:flex;flex-direction:column;gap:2px"></div>
+        <div class="grid"><div><label for="comboName">שם לשילוב (לשמירה)</label><input id="comboName" placeholder="למשל: ערכת חורף" autocomplete="off"></div></div>
+        <div class="acts"><button type="button" class="sm" id="multiAdd">הוסף לחיוב</button><button type="button" class="ghost sm" id="multiSave">שמור כשילוב והוסף</button><button type="button" class="ghost sm" id="multiClose">סגור</button></div>
+        <div class="mute" id="multiMsg"></div>
+      </div>
       <div><label for="cdesc">תיאור בחשבונית (נבנה לבד מהפריטים, אפשר לשנות)</label><input id="cdesc" autocomplete="off"></div>
       <div class="total"><span>סה"כ לתשלום</span><span id="total">₪0</span></div>
       <div class="err" id="chargeErr" hidden></div>
@@ -119,6 +133,16 @@ button.wide{width:100%;padding:11px 16px;font-size:16px}
     </form>
     <div class="top"><h2>חיובים אחרונים</h2><button class="ghost sm" id="reload">רענן</button></div>
     <div id="list" style="display:flex;flex-direction:column;gap:10px"></div>
+  </section>
+
+  <section id="paneLog" style="display:none;flex-direction:column;gap:14px">
+    <div class="card">
+      <div class="top"><b>יומן פעילות</b><button class="ghost sm" id="logReload">רענן</button></div>
+      <div id="logSum" class="mute"></div>
+      <div class="chips" id="logChips"></div>
+      <input id="logSearch" placeholder="חיפוש לפי שם לקוח או תיאור" autocomplete="off">
+    </div>
+    <div id="logList" style="display:flex;flex-direction:column;gap:10px"></div>
   </section>
 
   <section id="paneItems" style="display:none;flex-direction:column;gap:14px">
@@ -162,7 +186,7 @@ var $=function(id){return document.getElementById(id)};
 var esc=function(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})};
 var money=function(n){return '₪'+Number(n||0).toLocaleString('he-IL',{maximumFractionDigits:2})};
 var token='';try{token=localStorage.getItem('cd_token')||''}catch(e){}
-var state={items:[],customers:[],lines:[],cfg:{vat:18}};
+var state={items:[],customers:[],combos:[],all:[],lines:[],cfg:{vat:18}};
 
 function api(action,data){
   return fetch('/.netlify/functions/api',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify(Object.assign({action:action},data||{}))})
@@ -194,10 +218,10 @@ $('logout').onclick=logout;
 
 /* ---------- tabs ---------- */
 function tab(t){
-  $('tCharge').className=t==='charge'?'on':'';$('tItems').className=t==='items'?'on':'';$('tSettings').className=t==='settings'?'on':'';
-  $('paneCharge').style.display=t==='charge'?'flex':'none';$('paneItems').style.display=t==='items'?'flex':'none';$('paneSettings').style.display=t==='settings'?'flex':'none';
-  if(t==='settings')loadSettingsTab()}
-$('tCharge').onclick=function(){tab('charge')};$('tItems').onclick=function(){tab('items')};$('tSettings').onclick=function(){tab('settings')};
+  [['charge','tCharge','paneCharge'],['log','tLog','paneLog'],['items','tItems','paneItems'],['settings','tSettings','paneSettings']].forEach(function(x){
+    $(x[1]).className=t===x[0]?'on':'';$(x[2]).style.display=t===x[0]?'flex':'none'});
+  if(t==='settings')loadSettingsTab();if(t==='log')loadList()}
+$('tCharge').onclick=function(){tab('charge')};$('tLog').onclick=function(){tab('log')};$('tItems').onclick=function(){tab('items')};$('tSettings').onclick=function(){tab('settings')};
 
 /* ---------- boot ---------- */
 function boot(){
@@ -214,9 +238,9 @@ function boot(){
 /* ---------- what the page has learned ---------- */
 function byUse(a,b){return (b.uses||0)-(a.uses||0)||(b.last||0)-(a.last||0)}
 function loadLearned(){
-  return Promise.all([api('items'),api('customers')]).then(function(r){
-    state.items=(r[0].items||[]).sort(byUse);state.customers=(r[1].customers||[]).sort(byUse);
-    renderItems();renderCustomers();
+  return Promise.all([api('items'),api('customers'),api('combos')]).then(function(r){
+    state.items=(r[0].items||[]).sort(byUse);state.customers=(r[1].customers||[]).sort(byUse);state.combos=r[2].combos||[];
+    renderItems();renderCustomers();renderCombos();
   }).catch(function(){});
 }
 function renderCustomers(){
@@ -287,28 +311,107 @@ $('copyLink').onclick=function(){var t=$('linkUrl').textContent,b=this;
   try{navigator.clipboard.writeText(t).then(function(){b.textContent='הועתק'},function(){sel()})}catch(e){sel()}
   function sel(){var r=document.createRange();r.selectNodeContents($('linkUrl'));var s=getSelection();s.removeAllRanges();s.addRange(r);b.textContent='סמן והעתק'}};
 
-/* ---------- recent charges ---------- */
-function loadList(){
-  api('list').then(function(d){
-    var rows=(d.charges||[]).map(function(c){
-      var pill=c.status==='paid'?['p-ok','שולם']:c.status==='reported'?['p-rep','uPay דיווחה · ממתין לאישור']:['p-wait','ממתין לתשלום'];
-      var act='';
-      if(c.status==='reported')act='<div class="mute">'+esc(c.note||'')+'</div><button class="sm" data-confirm="'+c.id+'">אישרתי מול uPay · הפק חשבונית</button>';
-      else if(c.status==='paid')act=c.invoiceNo?'<span class="pill p-ok">חשבונית '+esc(c.invoiceNo)+'</span>':'<button class="sm" data-confirm="'+c.id+'">'+(c.invoiceError?'נסה שוב':'הפק חשבונית')+'</button>'+(c.invoiceError?'<div class="err">'+esc(c.invoiceError)+'</div>':'');
-      else act='<button class="ghost sm" data-copy="'+esc(c.url)+'">העתק קישור</button>';
-      return '<div class="card"><div class="top"><b>'+esc(c.name||'ללא שם')+'</b><span class="pill '+pill[0]+'">'+pill[1]+'</span></div>'
-       +'<div class="mute">'+money(c.total)+' · '+esc(c.description)+' · '+new Date(c.createdAt).toLocaleDateString('he-IL')+'</div><div class="acts">'+act+'</div></div>';
-    }).join('');
-    $('list').innerHTML=rows||'<div class="card mute">עדיין אין חיובים.</div>';
-  }).catch(function(){});
+/* ---------- several products at once, and saved combinations ---------- */
+function renderCombos(){
+  $('comboSel').innerHTML='<option value="">הוסף שילוב שמור...</option>'+state.combos.map(function(c,i){return '<option value="'+i+'">'+esc(c.name)+' ('+c.items.length+' פריטים)</option>'}).join('');
 }
-$('reload').onclick=loadList;
-$('list').addEventListener('click',function(e){
+function pushLines(list){
+  state.lines=state.lines.filter(function(l){return l.name||num(l.price)});
+  list.forEach(function(i){
+    var ex=state.lines.filter(function(l){return l.name===i.name})[0];
+    if(ex)ex.qty=num(ex.qty)+(i.qty||1);else state.lines.push({name:i.name,sku:i.sku||'',qty:i.qty||1,price:i.price})});
+  if(!state.lines.length)state.lines.push({name:'',sku:'',qty:1,price:''});
+  descTouched=false;renderLines();
+}
+function renderMulti(){
+  var q=$('multiSearch').value.trim().toLowerCase(),checked={};
+  Array.prototype.forEach.call($('multiList').querySelectorAll('input:checked'),function(i){checked[i.value]=1});
+  $('multiList').innerHTML=state.items.filter(function(i){return !q||i.name.toLowerCase().indexOf(q)>=0||String(i.sku).toLowerCase().indexOf(q)>=0})
+    .map(function(i){return '<label class="chk"><input type="checkbox" value="'+esc(i.name)+'"'+(checked[i.name]?' checked':'')+'><span>'+esc(i.name)+'</span><span class="mute" style="margin-inline-start:auto">'+money(i.price)+'</span></label>'}).join('')
+    ||'<div class="mute">אין פריטים. הוסף פריטים בלשונית פריטים.</div>';
+}
+function pickedItems(){
+  var names={};Array.prototype.forEach.call($('multiList').querySelectorAll('input:checked'),function(i){names[i.value]=1});
+  return state.items.filter(function(i){return names[i.name]}).map(function(i){return {name:i.name,sku:i.sku,price:i.price,qty:1}});
+}
+$('openMulti').onclick=function(){$('multiBox').hidden=!$('multiBox').hidden;$('multiMsg').textContent='';renderMulti()};
+$('multiClose').onclick=function(){$('multiBox').hidden=true};
+$('multiSearch').addEventListener('input',renderMulti);
+$('multiAdd').onclick=function(){var p=pickedItems();if(!p.length){$('multiMsg').textContent='סמן לפחות פריט אחד';return}pushLines(p);$('multiBox').hidden=true;renderMulti()};
+$('multiSave').onclick=function(){
+  var p=pickedItems(),n=$('comboName').value.trim();
+  if(p.length<2){$('multiMsg').textContent='שילוב הוא לפחות שני פריטים';return}
+  if(!n){$('multiMsg').textContent='תן שם לשילוב';return}
+  state.combos=state.combos.filter(function(c){return c.name!==n});state.combos.push({name:n,items:p});
+  api('combos-save',{combos:state.combos}).then(function(d){
+    if(!d.ok){$('multiMsg').textContent='השמירה נכשלה';return}
+    $('comboName').value='';renderCombos();pushLines(p);$('multiBox').hidden=true});
+};
+$('comboSel').onchange=function(){
+  var c=state.combos[+this.value];this.value='';if(!c)return;
+  pushLines(c.items.map(function(i){
+    var cur=state.items.filter(function(x){return x.name===i.name})[0];
+    return {name:i.name,sku:i.sku,price:cur?cur.price:i.price,qty:i.qty||1}}));
+};
+
+/* ---------- recent charges and the activity log ---------- */
+var logFilter='all',editId='';
+function statusOf(c){return c.status==='paid'?['p-ok','שולם']:c.status==='reported'?['p-rep','uPay דיווחה · ממתין לאישור']:['p-wait','ממתין לתשלום']}
+function rowHtml(c,full){
+  var pill=statusOf(c),act='';
+  if(c.status==='reported')act+='<div class="mute">'+esc(c.note||'')+'</div><button class="sm" data-confirm="'+c.id+'">אישרתי מול uPay · הפק חשבונית</button>';
+  else if(c.status==='paid')act+=c.invoiceNo?'<span class="pill p-ok">חשבונית '+esc(c.invoiceNo)+'</span>':'<button class="sm" data-confirm="'+c.id+'">'+(c.invoiceError?'נסה שוב':'הפק חשבונית')+'</button>'+(c.invoiceError?'<div class="err">'+esc(c.invoiceError)+'</div>':'');
+  else act+='<button class="ghost sm" data-copy="'+esc(c.url)+'">העתק קישור</button>';
+  if(full&&editId===c.id){
+    return '<div class="card"><div class="grid"><div><label>שם</label><input id="e_name" value="'+esc(c.name)+'"></div><div><label>נייד</label><input id="e_phone" dir="ltr" value="'+esc(c.phone||'')+'"></div>'
+      +'<div><label>מייל</label><input id="e_email" dir="ltr" value="'+esc(c.email||'')+'"></div><div><label>תיאור</label><input id="e_desc" value="'+esc(c.description||'')+'"></div></div>'
+      +'<div class="mute">הסכום לא ניתן לעריכה. כדי לשנות אותו, מחק וצור חיוב חדש.</div>'
+      +'<div class="acts"><button class="sm" data-save="'+c.id+'">שמור</button><button class="ghost sm" data-cancel="1">בטל</button></div></div>';
+  }
+  var items=(c.lines||[]).map(function(l){return esc(l.name)+(l.qty!==1?' ×'+l.qty:'')}).join(' · ');
+  var tools=full?'<button class="ghost sm" data-edit="'+c.id+'">ערוך</button><button class="ghost sm danger" data-del="'+c.id+'">מחק</button>':'';
+  return '<div class="card"><div class="top"><b>'+esc(c.name||'ללא שם')+'</b><span class="pill '+pill[0]+'">'+pill[1]+'</span></div>'
+    +'<div class="mute">'+money(c.total)+' · '+esc(c.description)+' · '+new Date(c.createdAt).toLocaleDateString('he-IL')+(c.manual?' · נרשם ידנית':'')+'</div>'
+    +(full&&items?'<div class="mute">'+items+'</div>':'')
+    +'<div class="acts">'+act+tools+'</div></div>';
+}
+function renderRecent(){
+  var rows=state.all.slice(0,5).map(function(c){return rowHtml(c,false)}).join('');
+  $('list').innerHTML=rows||'<div class="card mute">עדיין אין חיובים.</div>';
+}
+function renderLog(){
+  var all=state.all,cnt={all:all.length,pending:0,reported:0,paid:0},sum=0;
+  all.forEach(function(c){cnt[c.status]=(cnt[c.status]||0)+1;if(c.status==='paid')sum+=c.total});
+  $('logSum').textContent='שולם בסך הכול '+money(Math.round(sum*100)/100)+' מתוך '+all.length+' חיובים';
+  var defs=[['all','הכול'],['pending','ממתינים'],['reported','לאישור'],['paid','שולמו']];
+  $('logChips').innerHTML=defs.map(function(d){return '<button type="button" data-f="'+d[0]+'" class="'+(logFilter===d[0]?'on':'')+'">'+d[1]+' ('+(cnt[d[0]]||0)+')</button>'}).join('');
+  var q=$('logSearch').value.trim().toLowerCase();
+  var rows=all.filter(function(c){return (logFilter==='all'||c.status===logFilter)&&(!q||(String(c.name)+' '+String(c.description)).toLowerCase().indexOf(q)>=0)})
+    .map(function(c){return rowHtml(c,true)}).join('');
+  $('logList').innerHTML=rows||'<div class="card mute">אין חיובים בסינון הזה.</div>';
+}
+function loadList(){
+  return api('list').then(function(d){state.all=d.charges||[];renderRecent();renderLog()}).catch(function(){});
+}
+$('reload').onclick=loadList;$('logReload').onclick=loadList;
+$('logSearch').addEventListener('input',renderLog);
+$('logChips').addEventListener('click',function(e){var f=e.target.dataset.f;if(!f)return;logFilter=f;renderLog()});
+function rowClick(e){
   var b=e.target.closest('button');if(!b)return;
   if(b.dataset.copy){try{navigator.clipboard.writeText(b.dataset.copy)}catch(x){};b.textContent='הועתק';return}
-  if(b.dataset.confirm){b.disabled=true;b.textContent='מפיק...';
-    api('confirm',{id:b.dataset.confirm}).then(function(){loadList()}).catch(function(){loadList()})}
-});
+  if(b.dataset.confirm){b.disabled=true;b.textContent='מפיק...';api('confirm',{id:b.dataset.confirm}).then(loadList).catch(loadList);return}
+  if(b.dataset.edit){editId=b.dataset.edit;renderLog();return}
+  if(b.dataset.cancel){editId='';renderLog();return}
+  if(b.dataset.save){
+    api('charge-update',{id:b.dataset.save,name:$('e_name').value,phone:$('e_phone').value,email:$('e_email').value,description:$('e_desc').value}).then(function(d){
+      if(!d.ok){alert(d.reason||'השמירה נכשלה');return}editId='';loadList()});return}
+  if(b.dataset.del){
+    var c=state.all.filter(function(x){return x.id===b.dataset.del})[0]||{};
+    var warn=c.invoiceNo?'החשבונית '+c.invoiceNo+' נשארת ב-iCount ולא נמחקת משם.':c.status==='pending'?'אם הלקוח כבר שילם בקישור הזה, התשלום יגיע ל-uPay אבל לא יירשם כאן.':'';
+    if(!confirm('למחוק את החיוב של '+(c.name||'ללא שם')+' ('+money(c.total)+')? '+warn))return;
+    api('charge-delete',{id:b.dataset.del}).then(loadList)}
+}
+$('list').addEventListener('click',rowClick);$('logList').addEventListener('click',rowClick);
 
 /* ---------- items ---------- */
 function renderItems(){

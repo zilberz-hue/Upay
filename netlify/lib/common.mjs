@@ -10,6 +10,7 @@ export const siteUrl = () => String(process.env.SITE_URL || process.env.URL || "
 export const charges = () => getStore({ name: "charges", consistency: "strong" });
 export const items = () => getStore({ name: "items", consistency: "strong" });
 export const customers = () => getStore({ name: "customers", consistency: "strong" });
+export const combos = () => getStore({ name: "combos", consistency: "strong" });
 export const claims = () => getStore({ name: "claims", consistency: "strong" });
 
 /* ---------------- settings: typed once on the page, kept on the server ----------------
