@@ -7,8 +7,8 @@
 <title>חיוב לקוח</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700&display=swap">
 <style>
-:root{--bg:#f4f6f8;--card:#fff;--fg:#1d2733;--mute:#5d6b7a;--line:#dde3ea;--accent:#1f5fd6;--accent-fg:#fff;--ok:#1b7a4b;--ok-bg:#e3f4ea;--wait:#8a5a00;--wait-bg:#fdf0d5;--rep-bg:#e4edfc;--bad:#c0392b;--font:'Heebo',system-ui,Arial,sans-serif}
-@media(prefers-color-scheme:dark){:root{--bg:#10161d;--card:#18212b;--fg:#e6ecf2;--mute:#9aa8b6;--line:#2a3643;--accent:#6ea0ff;--accent-fg:#0b1220;--ok:#6fd49c;--ok-bg:#16301f;--wait:#f0c15a;--wait-bg:#33280f;--rep-bg:#1a2a4a;--bad:#ff8a7a;color-scheme:dark}}
+:root{--bg:#f4f6f8;--card:#fff;--fg:#1d2733;--mute:#5d6b7a;--line:#dde3ea;--accent:#8a5a2b;--accent-fg:#fff;--ok:#3f7d20;--ok-bg:#e6f2dc;--wait:#8a5a00;--wait-bg:#fdf0d5;--rep-bg:#f3e8d9;--bad:#c0392b;--font:'Heebo',system-ui,Arial,sans-serif}
+@media(prefers-color-scheme:dark){:root{--bg:#10161d;--card:#18212b;--fg:#e6ecf2;--mute:#9aa8b6;--line:#2a3643;--accent:#d9a766;--accent-fg:#1a1208;--ok:#9bd36a;--ok-bg:#1e2e14;--wait:#f0c15a;--wait-bg:#33280f;--rep-bg:#3a2c1a;--bad:#ff8a7a;color-scheme:dark}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--font);font-size:15px;line-height:1.5;padding:20px 16px 48px}
 .wrap{max-width:620px;margin:0 auto;display:flex;flex-direction:column;gap:14px;min-width:0}
@@ -45,6 +45,11 @@ td,th{padding:6px;border-bottom:1px solid var(--line);text-align:right}
 .scroll{overflow-x:auto}
 .login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px 16px;margin:-20px -16px -48px}
 .lcard{width:100%;max-width:420px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:28px 24px;display:flex;flex-direction:column;gap:16px;box-shadow:0 8px 30px rgba(20,40,80,.08)}
+.logo{display:block;width:180px;max-width:70%;height:auto;margin:0 auto;background:#fff;border-radius:12px}
+.logo-sm{width:56px;height:auto;background:#fff;border-radius:8px}
+.brand{display:flex;align-items:center;gap:12px}
+.lcard{text-align:center}
+.lcard .lead,.lcard .steps,.lcard form{text-align:right}
 .mark{width:52px;height:52px;border-radius:14px;background:var(--accent);color:var(--accent-fg);display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:700}
 .lcard h1{font-size:28px;margin:0}
 .lead{margin:0;color:var(--mute);font-size:16px;line-height:1.6}
@@ -60,7 +65,7 @@ button.wide{width:100%;padding:11px 16px;font-size:16px}
 <body>
 <div class="login" id="login" hidden>
   <main class="lcard">
-    <div class="mark" aria-hidden="true">₪</div>
+    <img class="logo" src="logo.png" alt="TizonHealth">
     <h1>חיוב לקוח</h1>
     <p class="lead">בוחרים פריטים, שולחים ללקוח קישור תשלום, ואחרי התשלום יוצאת חשבונית. הכול במקום אחד.</p>
     <ol class="steps">
@@ -80,7 +85,7 @@ button.wide{width:100%;padding:11px 16px;font-size:16px}
 </div>
 
 <div class="wrap" id="app" hidden>
-  <div class="top"><h1>חיוב לקוח</h1><button class="ghost sm" id="logout">יציאה</button></div>
+  <div class="top"><div class="brand"><img class="logo-sm" src="logo.png" alt="TizonHealth"><h1>חיוב לקוח</h1></div><button class="ghost sm" id="logout">יציאה</button></div>
   <div class="tabs"><button id="tCharge" class="on">חיוב</button><button id="tItems">פריטים</button><button id="tSettings">הגדרות</button></div>
   <div class="card err" id="cfgWarn" hidden></div>
 
