@@ -12,8 +12,78 @@ export const items = () => getStore({ name: "items", consistency: "strong" });
 export const customers = () => getStore({ name: "customers", consistency: "strong" });
 export const claims = () => getStore({ name: "claims", consistency: "strong" });
 
-/* ---------------- sign-in: one password, signed 30-day token ---------------- */
-const secret = () => crypto.createHash("sha256").update("charge-desk|" + String(process.env.ADMIN_PASSWORD || "")).digest();
+/* ---------------- settings: typed once on the page, kept on the server ----------------
+   A value set in Netlify's environment wins; otherwise the one saved from the
+   Settings tab is used. Secrets are written here and never sent back: the page
+   only ever sees a masked hint. */
+export const SETTING_KEYS = ["UPAY_EMAIL", "UPAY_API_KEY", "ICOUNT_CID", "ICOUNT_USER", "ICOUNT_PASS", "ICOUNT_VAT_RATE", "ICOUNT_BANK_ACCOUNT"];
+export const SECRET_KEYS = new Set(["UPAY_API_KEY", "ICOUNT_PASS"]);
+const settingsStore = () => getStore({ name: "settings", consistency: "strong" });
+const FROM_NETLIFY = {};
+for (const k of [...SETTING_KEYS, "ADMIN_PASSWORD"]) FROM_NETLIFY[k] = process.env[k];
+let stored = {}, adminHash = "", loadedAt = 0;
+
+export async function loadSettings(force = false) {
+  if (!force && Date.now() - loadedAt < 5000) return stored;
+  const st = settingsStore();
+  stored = (await st.get("all", { type: "json" })) || {};
+  adminHash = ((await st.get("admin", { type: "json" })) || {}).hash || "";
+  loadedAt = Date.now();
+  for (const k of SETTING_KEYS) {
+    if (FROM_NETLIFY[k]) process.env[k] = FROM_NETLIFY[k];
+    else if (stored[k]) process.env[k] = String(stored[k]);
+    else delete process.env[k];
+  }
+  return stored;
+}
+export async function saveSettings(values, clear = []) {
+  const st = settingsStore();
+  const cur = (await st.get("all", { type: "json" })) || {};
+  for (const k of SETTING_KEYS) if (values && values[k] != null && String(values[k]).trim() !== "") cur[k] = String(values[k]).trim();
+  for (const k of clear) if (SETTING_KEYS.includes(k)) delete cur[k];
+  await st.setJSON("all", cur);
+  await loadSettings(true);
+}
+export function describeSettings() {
+  const out = {};
+  for (const k of SETTING_KEYS) {
+    const fromNetlify = Boolean(FROM_NETLIFY[k]);
+    const v = fromNetlify ? FROM_NETLIFY[k] : stored[k] || "";
+    out[k] = { set: Boolean(v), source: fromNetlify ? "netlify" : v ? "page" : null,
+      hint: !v ? "" : SECRET_KEYS.has(k) ? "••••" + String(v).slice(-4) : String(v) };
+  }
+  return out;
+}
+
+/* ---------------- sign-in: one password, signed 30-day token ----------------
+   The password is either ADMIN_PASSWORD in Netlify, or the one created on the
+   page the first time it is opened (kept only as a salted hash). */
+const scryptHash = (pw, salt) => crypto.scryptSync(String(pw), salt, 32).toString("hex");
+export const hasPassword = () => Boolean(FROM_NETLIFY.ADMIN_PASSWORD || adminHash);
+export const passwordFromNetlify = () => Boolean(FROM_NETLIFY.ADMIN_PASSWORD);
+export function checkPassword(pw) {
+  if (FROM_NETLIFY.ADMIN_PASSWORD) return same(pw, FROM_NETLIFY.ADMIN_PASSWORD);
+  if (!adminHash) return false;
+  const [salt, h] = adminHash.split(":");
+  return same(scryptHash(pw, salt), h);
+}
+/* The first password can be created once: the claim is atomic, so two people
+   opening a fresh site at the same moment cannot both win. */
+export async function createFirstPassword(pw) {
+  if (hasPassword()) return false;
+  const salt = crypto.randomBytes(16).toString("hex");
+  const r = await settingsStore().setJSON("admin", { hash: salt + ":" + scryptHash(pw, salt) }, { onlyIfNew: true });
+  await loadSettings(true);
+  return r.modified !== false;
+}
+export async function changePassword(pw) {
+  if (FROM_NETLIFY.ADMIN_PASSWORD) return false;
+  const salt = crypto.randomBytes(16).toString("hex");
+  await settingsStore().setJSON("admin", { hash: salt + ":" + scryptHash(pw, salt) });
+  await loadSettings(true);
+  return true;
+}
+const secret = () => crypto.createHash("sha256").update("charge-desk|" + String(FROM_NETLIFY.ADMIN_PASSWORD || adminHash || "")).digest();
 const b64 = (b) => Buffer.from(b).toString("base64url");
 export const same = (a, b) => {
   const x = Buffer.from(String(a || "")), y = Buffer.from(String(b || ""));
@@ -23,8 +93,9 @@ export function makeToken() {
   const p = b64(JSON.stringify({ exp: Date.now() + 30 * 864e5 }));
   return p + "." + crypto.createHmac("sha256", secret()).update(p).digest("base64url");
 }
-export function isAdmin(req) {
-  if (!process.env.ADMIN_PASSWORD) return false;
+export async function isAdmin(req) {
+  await loadSettings();
+  if (!hasPassword()) return false;
   const t = String(req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
   const [p, sig] = t.split(".");
   if (!p || !sig) return false;
@@ -108,7 +179,7 @@ export const icountReady = () => Boolean(process.env.ICOUNT_CID && process.env.I
 function payPart(method, sum, date) {
   if (method === "bank") {
     const account = String(process.env.ICOUNT_BANK_ACCOUNT || "").trim();
-    if (!account) return { __missing: "להעברה בנקאית חסר מזהה חשבון הבנק ב-iCount (ICOUNT_BANK_ACCOUNT ב-Netlify)." };
+    if (!account) return { __missing: "להעברה בנקאית חסר מזהה חשבון הבנק ב-iCount (אפשר להזין בלשונית הגדרות)." };
     return { bank_transfer: { sum, date, account: Number(account) || account } };
   }
   if (method === "cash") return { cash: { sum } };
@@ -117,7 +188,7 @@ function payPart(method, sum, date) {
 
 /* One tax invoice-receipt (invrec) with a line per item, paid by card. */
 export async function icountInvoice(c) {
-  if (!icountReady()) return { ok: false, reason: "iCount לא מחובר: חסרים מזהה חברה, משתמש או סיסמה ב-Netlify." };
+  if (!icountReady()) return { ok: false, reason: "iCount לא מחובר: חסרים מזהה חברה, משתמש או סיסמה. אפשר להזין בלשונית הגדרות." };
   let base = "", sid = "", why = "";
   for (const root of IC_ROOTS) {
     try {

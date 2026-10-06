@@ -2,13 +2,14 @@
    The address carries the charge id and its secret token; neither is proof of payment.
    With an API key the transaction is asked from uPay itself and the invoice follows
    by itself. Without one, the report is written down and the owner confirms it. */
-import { charges, claims, same, round2, upayCreds, upayTransaction, issueInvoice } from "../lib/common.mjs";
+import { charges, claims, loadSettings, same, round2, upayCreds, upayTransaction, issueInvoice } from "../lib/common.mjs";
 
 const html = (msg) => new Response(
   `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>תשלום</title></head><body style="font-family:system-ui,Arial,sans-serif;text-align:center;padding:60px 16px"><h2>${msg}</h2></body></html>`,
   { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
 
 export default async (req) => {
+  await loadSettings();
   const url = new URL(req.url);
   const q = Object.fromEntries(url.searchParams);
   if (req.method === "POST") {

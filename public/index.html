@@ -52,6 +52,7 @@ td,th{padding:6px;border-bottom:1px solid var(--line);text-align:right}
 .steps li{display:flex;gap:12px;align-items:flex-start;font-size:14.5px}
 .steps b{flex:none;width:24px;height:24px;border-radius:50%;background:var(--rep-bg);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:13px}
 #loginForm{display:flex;flex-direction:column;gap:10px}
+.note{background:var(--rep-bg);color:var(--fg);border-radius:8px;padding:10px 12px;font-size:14px}
 button.wide{width:100%;padding:11px 16px;font-size:16px}
 [hidden]{display:none!important}
 </style>
@@ -68,17 +69,19 @@ button.wide{width:100%;padding:11px 16px;font-size:16px}
       <li><b>3</b><span>הלקוח משלם, ומופקת חשבונית מס־קבלה.</span></li>
     </ol>
     <form id="loginForm">
-      <label for="pw">סיסמת כניסה</label>
+      <div class="note" id="setupNote" hidden>זו הפעם הראשונה שנכנסים. בחר סיסמה (לפחות 6 תווים). אחר כך תיכנס איתה בכל פעם.</div>
+      <label for="pw" id="pwLabel">סיסמת כניסה</label>
       <input id="pw" type="password" autocomplete="current-password" placeholder="הקלד סיסמה">
+      <input id="pw2" type="password" autocomplete="new-password" placeholder="הקלד שוב את הסיסמה" hidden>
       <div class="err" id="loginErr" hidden></div>
-      <button type="submit" class="wide">כניסה</button>
+      <button type="submit" class="wide" id="loginBtn">כניסה</button>
     </form>
   </main>
 </div>
 
 <div class="wrap" id="app" hidden>
   <div class="top"><h1>חיוב לקוח</h1><button class="ghost sm" id="logout">יציאה</button></div>
-  <div class="tabs"><button id="tCharge" class="on">חיוב</button><button id="tItems">פריטים</button></div>
+  <div class="tabs"><button id="tCharge" class="on">חיוב</button><button id="tItems">פריטים</button><button id="tSettings">הגדרות</button></div>
   <div class="card err" id="cfgWarn" hidden></div>
 
   <section id="paneCharge" style="display:flex;flex-direction:column;gap:14px">
@@ -128,6 +131,23 @@ button.wide{width:100%;padding:11px 16px;font-size:16px}
       <div class="mute" id="itemsMsg"></div>
     </div>
   </section>
+  <section id="paneSettings" style="display:none;flex-direction:column;gap:14px">
+    <div class="card">
+      <b>חיבור uPay</b>
+      <div id="sUpay"></div>
+    </div>
+    <div class="card">
+      <b>חיבור iCount</b>
+      <div id="sIcount"></div>
+    </div>
+    <div class="card">
+      <b>סיסמת כניסה</b>
+      <div id="sPass"></div>
+    </div>
+    <div class="err" id="setErr" hidden></div>
+    <div class="acts"><button id="saveSettings">שמור</button><span class="mute" id="setMsg"></span></div>
+    <div class="mute">הפרטים נשמרים בשרת בלבד ולא חוזרים לדפדפן. אחרי השמירה רואים רק את 4 התווים האחרונים. אם ערך מוגדר גם ב-Netlify, הוא קובע.</div>
+  </section>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -143,29 +163,42 @@ function api(action,data){
    .then(function(r){if(r.status===401){logout();throw new Error('auth')}return r.json()});
 }
 function logout(){token='';try{localStorage.removeItem('cd_token')}catch(e){};show()}
-function show(){$('login').hidden=!!token;$('app').hidden=!token;if(token)boot()}
+function show(){$('login').hidden=!!token;$('app').hidden=!token;if(token)boot();else loginMode()}
 
+var setupMode=false;
+function loginMode(){
+  fetch('/.netlify/functions/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'status'})})
+   .then(function(r){return r.json()}).then(function(d){
+     setupMode=!!d.needsSetup;
+     $('setupNote').hidden=!setupMode;$('pw2').hidden=!setupMode;
+     $('pwLabel').textContent=setupMode?'בחר סיסמה':'סיסמת כניסה';
+     $('loginBtn').textContent=setupMode?'צור סיסמה והיכנס':'כניסה';
+   }).catch(function(){});
+}
 $('loginForm').addEventListener('submit',function(e){
   e.preventDefault();var er=$('loginErr');er.hidden=true;
-  fetch('/.netlify/functions/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:$('pw').value})})
+  if(setupMode&&$('pw').value!==$('pw2').value){er.textContent='שתי הסיסמאות לא זהות';er.hidden=false;return}
+  fetch('/.netlify/functions/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:setupMode?'setup':'login',password:$('pw').value})})
    .then(function(r){return r.json()}).then(function(d){
-     if(d.ok){token=d.token;try{localStorage.setItem('cd_token',token)}catch(x){};$('pw').value='';show()}
-     else{er.textContent=d.error||'שגיאה';er.hidden=false}
+     if(d.ok){token=d.token;try{localStorage.setItem('cd_token',token)}catch(x){};$('pw').value='';$('pw2').value='';show()}
+     else{er.textContent=d.error||'שגיאה';er.hidden=false;if(d.needsSetup)loginMode()}
    }).catch(function(){er.textContent='לא הצלחנו להתחבר';er.hidden=false});
 });
 $('logout').onclick=logout;
 
 /* ---------- tabs ---------- */
-function tab(t){var c=t==='charge';$('tCharge').className=c?'on':'';$('tItems').className=c?'':'on';
-  $('paneCharge').style.display=c?'flex':'none';$('paneItems').style.display=c?'none':'flex'}
-$('tCharge').onclick=function(){tab('charge')};$('tItems').onclick=function(){tab('items')};
+function tab(t){
+  $('tCharge').className=t==='charge'?'on':'';$('tItems').className=t==='items'?'on':'';$('tSettings').className=t==='settings'?'on':'';
+  $('paneCharge').style.display=t==='charge'?'flex':'none';$('paneItems').style.display=t==='items'?'flex':'none';$('paneSettings').style.display=t==='settings'?'flex':'none';
+  if(t==='settings')loadSettingsTab()}
+$('tCharge').onclick=function(){tab('charge')};$('tItems').onclick=function(){tab('items')};$('tSettings').onclick=function(){tab('settings')};
 
 /* ---------- boot ---------- */
 function boot(){
   api('config').then(function(c){
     state.cfg=c;var w=[];
-    if(!c.upay)w.push('uPay לא מחובר: חסר UPAY_EMAIL ב-Netlify.');
-    if(!c.icount)w.push('iCount לא מחובר: חסרים ICOUNT_CID, ICOUNT_USER ו-ICOUNT_PASS ב-Netlify.');
+    if(!c.upay)w.push('uPay לא מחובר. הזן את האימייל בלשונית הגדרות.');
+    if(!c.icount)w.push('iCount לא מחובר. הזן מזהה חברה, משתמש וסיסמה בלשונית הגדרות.');
     $('cfgWarn').hidden=!w.length;$('cfgWarn').textContent=w.join(' ');
   }).catch(function(){});
   loadLearned().then(function(){if(!state.lines.length)addLine()});
@@ -309,6 +342,38 @@ $('file').addEventListener('change',function(){
   };
   r.readAsArrayBuffer(f);
 });
+
+/* ---------- settings (kept on the server, typed once) ---------- */
+var FIELDS={
+  sUpay:[['UPAY_EMAIL','אימייל חשבון uPay',false],['UPAY_API_KEY','מפתח API של uPay (לא חובה)',true]],
+  sIcount:[['ICOUNT_CID','מזהה חברה',false],['ICOUNT_USER','משתמש',false],['ICOUNT_PASS','סיסמה',true],['ICOUNT_VAT_RATE','אחוז מע"מ (ברירת מחדל 18, עוסק פטור 0)',false],['ICOUNT_BANK_ACCOUNT','מזהה חשבון בנק ב-iCount (להעברה בנקאית בלבד)',false]]
+};
+var setDraft={};
+function loadSettingsTab(){
+  api('settings-get').then(function(d){
+    var S=d.settings||{};
+    Object.keys(FIELDS).forEach(function(box){
+      $(box).innerHTML=FIELDS[box].map(function(f){
+        var x=S[f[0]]||{},ph=x.set?(f[2]?x.hint+' · השאר ריק כדי לא לשנות':''):'לא מוגדר';
+        var src=x.source==='netlify'?' <span class="pill p-rep">מוגדר ב-Netlify</span>':x.set?' <span class="pill p-ok">נשמר</span>':' <span class="pill p-wait">חסר</span>';
+        return '<div style="margin-top:8px"><label for="s_'+f[0]+'">'+f[1]+src+'</label><input id="s_'+f[0]+'" dir="ltr" autocomplete="off" '+(f[2]?'type="password"':'type="text"')
+          +' value="'+(f[2]?'':esc(x.hint||''))+'" placeholder="'+esc(ph)+'" '+(x.source==='netlify'?'disabled':'')+'></div>';
+      }).join('');
+    });
+    $('sPass').innerHTML=d.passwordFromNetlify?'<div class="mute">הסיסמה מוגדרת ב-Netlify (ADMIN_PASSWORD) ולא ניתן לשנות אותה מכאן.</div>'
+      :'<label for="s_newPassword">סיסמה חדשה (השאר ריק כדי לא לשנות)</label><input id="s_newPassword" type="password" autocomplete="new-password">';
+  }).catch(function(){});
+}
+$('saveSettings').onclick=function(){
+  var b=this,er=$('setErr'),m=$('setMsg');er.hidden=true;m.textContent='';b.disabled=true;
+  var values={};
+  Object.keys(FIELDS).forEach(function(box){FIELDS[box].forEach(function(f){var i=$('s_'+f[0]);if(i&&!i.disabled&&i.value.trim())values[f[0]]=i.value.trim()})});
+  var np=$('s_newPassword');
+  api('settings-save',{values:values,newPassword:np&&np.value?np.value:undefined}).then(function(d){
+    if(!d.ok){er.textContent=d.reason||'השמירה נכשלה';er.hidden=false;return}
+    m.textContent='נשמר';loadSettingsTab();boot();
+  }).catch(function(){er.textContent='השמירה נכשלה';er.hidden=false}).then(function(){b.disabled=false});
+};
 
 show();
 </script>

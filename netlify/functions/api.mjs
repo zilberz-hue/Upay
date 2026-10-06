@@ -1,12 +1,12 @@
 /* The owner's API: items, charges, confirmation. Every call needs the signed token. */
 import crypto from "node:crypto";
-import { json, isAdmin, charges, items, customers, claims, learnItems, learnCustomer, round2, siteUrl, upayCreds, upayCreatePage, icountReady, vatRate, issueInvoice } from "../lib/common.mjs";
+import { json, isAdmin, charges, items, customers, claims, learnItems, learnCustomer, round2, siteUrl, upayCreds, upayCreatePage, icountReady, vatRate, issueInvoice, SETTING_KEYS, describeSettings, saveSettings, passwordFromNetlify, changePassword } from "../lib/common.mjs";
 
 const clean = (s, n) => String(s ?? "").trim().slice(0, n);
 
 export default async (req) => {
   if (req.method !== "POST") return json({ error: "method" }, 405);
-  if (!isAdmin(req)) return json({ error: "not signed in" }, 401);
+  if (!(await isAdmin(req))) return json({ error: "not signed in" }, 401);
   let b = {};
   try { b = await req.json(); } catch { return json({ error: "bad json" }, 400); }
   const store = charges();
@@ -15,6 +15,21 @@ export default async (req) => {
     case "config": {
       const u = upayCreds();
       return json({ ok: true, upay: Boolean(u), upayKey: Boolean(u && u.key), icount: icountReady(), vat: vatRate(), site: siteUrl() });
+    }
+
+    case "settings-get":
+      return json({ ok: true, settings: describeSettings(), passwordFromNetlify: passwordFromNetlify() });
+    case "settings-save": {
+      const values = {};
+      for (const k of SETTING_KEYS) if (b.values && b.values[k] != null) values[k] = clean(b.values[k], 200);
+      if (values.ICOUNT_VAT_RATE && !/^\d{1,2}(\.\d+)?$/.test(values.ICOUNT_VAT_RATE)) return json({ ok: false, reason: "אחוז המע\"מ הוא מספר, למשל 18 (0 לעוסק פטור)" });
+      if (values.UPAY_EMAIL && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.UPAY_EMAIL)) return json({ ok: false, reason: "אימייל uPay אינו תקין" });
+      await saveSettings(values, Array.isArray(b.clear) ? b.clear : []);
+      if (b.newPassword) {
+        if (String(b.newPassword).length < 6) return json({ ok: false, reason: "הסיסמה החדשה חייבת להיות לפחות 6 תווים" });
+        if (!(await changePassword(String(b.newPassword)))) return json({ ok: false, reason: "הסיסמה מוגדרת ב-Netlify ולא ניתן לשנות אותה מכאן" });
+      }
+      return json({ ok: true, settings: describeSettings() });
     }
 
     case "items": {
@@ -68,7 +83,7 @@ export default async (req) => {
       }
 
       const u = upayCreds();
-      if (!u) return json({ ok: false, reason: "uPay לא מחובר: חסר UPAY_EMAIL ב-Netlify." });
+      if (!u) return json({ ok: false, reason: "uPay לא מחובר. הזן את האימייל בלשונית הגדרות." });
       const site = siteUrl();
       if (!site) return json({ ok: false, reason: "כתובת האתר לא ידועה לשרת." });
 

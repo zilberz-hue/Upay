@@ -1,6 +1,6 @@
 /* On the way to uPay's payment form, for an account connected by email alone:
    the form is filled from the charge (never from the address) and posted at once. */
-import { charges, same, siteUrl, upayCreds, upayFormFields, UPAY_FORM } from "../lib/common.mjs";
+import { charges, loadSettings, same, siteUrl, upayCreds, upayFormFields, UPAY_FORM } from "../lib/common.mjs";
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const page = (inner, status = 200) => new Response(
@@ -8,6 +8,7 @@ const page = (inner, status = 200) => new Response(
   { status, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
 
 export default async (req) => {
+  await loadSettings();
   const q = new URL(req.url).searchParams;
   const id = String(q.get("c") || "");
   const c = id ? await charges().get(id, { type: "json" }) : null;
