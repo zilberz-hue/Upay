@@ -177,9 +177,11 @@ export const icountReady = () => Boolean(process.env.ICOUNT_CID && process.env.I
 /* How the money arrived, as iCount wants it: each method an object at the root
    of the request. A card is the default (a uPay charge); Bit and cash are
    recorded as cash. */
-function payPart(method, sum, date) {
+function payPart(method, sum, date, last4) {
   if (method === "cash") return { cash: { sum } };
-  return { cc: { sum, date, num_of_payments: 1 } };
+  /* The last four digits of the card travel with the payment: the tax
+     authority expects them on a card receipt. */
+  return { cc: { sum, date, num_of_payments: 1, ...(/^\d{4}$/.test(last4 || "") ? { card_number: last4 } : {}) } };
 }
 
 /* One tax invoice-receipt (invrec) with a line per item, paid by card. */
@@ -209,8 +211,8 @@ export async function icountInvoice(c) {
     body: JSON.stringify({
       sid, doctype: "invrec", client_name: c.name || "",
       email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.email || "") ? c.email : undefined,
-      items: lines, ...payPart(c.method, sum, date),
-      hwc: c.id ? `חיוב ${c.id}` : undefined,
+      items: lines, ...payPart(c.method, sum, date, c.last4),
+      hwc: c.id ? `חיוב ${c.id}${/^\d{4}$/.test(c.last4 || "") ? ` · כרטיס ****${c.last4}` : ""}` : undefined,
       send_email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.email || "") ? 1 : 0,
     }) });
   const d = await r.json().catch(() => ({}));

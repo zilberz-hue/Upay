@@ -28,7 +28,7 @@ export default async (req) => {
   const status = String(q.providererrordescription || q.status || "").toUpperCase();
   const trx = String(q.transactionid || q.cashierid || "").slice(0, 60);
   if (q.errormessage || status !== "SUCCESS" || !trx) {
-    await store.setJSON(id, { ...c, note: "uPay: התשלום לא הושלם" });
+    await store.setJSON(id, { ...c, status: c.status === "reported" ? c.status : "failed", note: "uPay: התשלום לא הושלם", failedAt: Date.now() });
     return done("התשלום לא הושלם.");
   }
 

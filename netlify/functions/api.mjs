@@ -59,12 +59,14 @@ export default async (req) => {
       return json({ ok: true });
     }
     case "charge-delete": {
-      const id = clean(b.id, 40);
-      if (!id) return json({ ok: false, reason: "חסר מזהה" });
-      await store.delete(id);
-      await claims().delete(id + ":paid").catch(() => {});
-      await claims().delete(id + ":invoice").catch(() => {});
-      return json({ ok: true });
+      const ids = (Array.isArray(b.ids) ? b.ids : [b.id]).map((x) => clean(x, 40)).filter(Boolean).slice(0, 500);
+      if (!ids.length) return json({ ok: false, reason: "חסר מזהה" });
+      for (const id of ids) {
+        await store.delete(id);
+        await claims().delete(id + ":paid").catch(() => {});
+        await claims().delete(id + ":invoice").catch(() => {});
+      }
+      return json({ ok: true, deleted: ids.length });
     }
 
     case "items": {
@@ -109,8 +111,10 @@ export default async (req) => {
          is issued at once. */
       if (b.alreadyPaid) {
         const method = ["cc", "cash"].includes(b.method) ? b.method : "cc";
+        const last4 = clean(b.last4, 4);
+        if (method === "cc" && !/^\d{4}$/.test(last4)) return json({ ok: false, reason: "הזן את 4 הספרות האחרונות של כרטיס האשראי" });
         const id = crypto.randomBytes(5).toString("hex");
-        await store.setJSON(id, { name, email, phone, lines, total, description, status: "paid", manual: true, method,
+        await store.setJSON(id, { name, email, phone, lines, total, description, status: "paid", manual: true, method, last4: method === "cc" ? last4 : "",
           createdAt: Date.now(), paidAt: Date.now() });
         await claims().set(id + ":paid", String(Date.now()), { onlyIfNew: true });
         const out = await issueInvoice(id);
@@ -148,6 +152,7 @@ export default async (req) => {
       const id = clean(b.id, 40);
       const c = id ? await store.get(id, { type: "json" }) : null;
       if (!c) return json({ ok: false, reason: "החיוב לא נמצא" });
+      if (/^\d{4}$/.test(clean(b.last4, 4))) { c.last4 = clean(b.last4, 4); await store.setJSON(id, c); }
       if (c.status !== "paid") {
         if (c.status !== "reported") return json({ ok: false, reason: "uPay עוד לא דיווחה על תשלום בחיוב הזה" });
         await store.setJSON(id, { ...c, status: "paid", paidAt: Date.now(), confirmed: true });
@@ -155,7 +160,11 @@ export default async (req) => {
       }
       return json(await issueInvoice(id));
     }
-    case "invoice": return json(await issueInvoice(clean(b.id, 40)));
+    case "invoice": {
+      const id = clean(b.id, 40), c = id ? await store.get(id, { type: "json" }) : null;
+      if (c && /^\d{4}$/.test(clean(b.last4, 4))) await store.setJSON(id, { ...c, last4: clean(b.last4, 4) });
+      return json(await issueInvoice(id));
+    }
   }
   return json({ error: "unknown action" }, 400);
 };
