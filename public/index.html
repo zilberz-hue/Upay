@@ -43,17 +43,37 @@ a.btn{display:inline-block;text-decoration:none;border-radius:8px;padding:9px 16
 table{width:100%;border-collapse:collapse;font-size:14px}
 td,th{padding:6px;border-bottom:1px solid var(--line);text-align:right}
 .scroll{overflow-x:auto}
+.login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px 16px;margin:-20px -16px -48px}
+.lcard{width:100%;max-width:420px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:28px 24px;display:flex;flex-direction:column;gap:16px;box-shadow:0 8px 30px rgba(20,40,80,.08)}
+.mark{width:52px;height:52px;border-radius:14px;background:var(--accent);color:var(--accent-fg);display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:700}
+.lcard h1{font-size:28px;margin:0}
+.lead{margin:0;color:var(--mute);font-size:16px;line-height:1.6}
+.steps{list-style:none;margin:0;padding:14px 0;border-block:1px solid var(--line);display:flex;flex-direction:column;gap:10px}
+.steps li{display:flex;gap:12px;align-items:flex-start;font-size:14.5px}
+.steps b{flex:none;width:24px;height:24px;border-radius:50%;background:var(--rep-bg);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:13px}
+#loginForm{display:flex;flex-direction:column;gap:10px}
+button.wide{width:100%;padding:11px 16px;font-size:16px}
 [hidden]{display:none!important}
 </style>
 </head>
 <body>
-<div class="wrap" id="login" hidden>
-  <h1>חיוב לקוח</h1>
-  <form class="card" id="loginForm">
-    <div><label for="pw">סיסמה</label><input id="pw" type="password" autocomplete="current-password"></div>
-    <div class="err" id="loginErr" hidden></div>
-    <div><button type="submit">כניסה</button></div>
-  </form>
+<div class="login" id="login" hidden>
+  <main class="lcard">
+    <div class="mark" aria-hidden="true">₪</div>
+    <h1>חיוב לקוח</h1>
+    <p class="lead">בוחרים פריטים, שולחים ללקוח קישור תשלום, ואחרי התשלום יוצאת חשבונית. הכול במקום אחד.</p>
+    <ol class="steps">
+      <li><b>1</b><span>מקלידים את הפריטים והלקוח. הדף זוכר אותם לפעם הבאה.</span></li>
+      <li><b>2</b><span>שולחים קישור תשלום בוואטסאפ, או מציגים QR.</span></li>
+      <li><b>3</b><span>הלקוח משלם, ומופקת חשבונית מס־קבלה.</span></li>
+    </ol>
+    <form id="loginForm">
+      <label for="pw">סיסמת כניסה</label>
+      <input id="pw" type="password" autocomplete="current-password" placeholder="הקלד סיסמה">
+      <div class="err" id="loginErr" hidden></div>
+      <button type="submit" class="wide">כניסה</button>
+    </form>
+  </main>
 </div>
 
 <div class="wrap" id="app" hidden>
