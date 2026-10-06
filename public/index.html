@@ -128,6 +128,7 @@ button.wide{width:100%;padding:11px 16px;font-size:16px}
       <input type="file" id="file" accept=".xlsx,.xls,.csv">
       <label style="display:flex;gap:8px;align-items:center;font-weight:400"><input type="checkbox" id="preVat" style="width:auto"> המחירים בקובץ הם לפני מע"מ</label>
       <div class="mute" id="importMsg"></div>
+      <div class="acts"><button type="button" class="ghost sm" id="loadSeed">טען את הקטלוג של Dr. Zilber (פורמולות וקרמים)</button></div>
     </div>
     <div class="card">
       <div class="top"><b id="itemsCount">פריטים</b><button class="sm" id="saveItems">שמור רשימה</button></div>
@@ -325,6 +326,15 @@ $('addItem').onclick=function(){state.items.push({name:'',sku:'',price:0});rende
 $('saveItems').onclick=function(){var b=this;b.disabled=true;
   api('items-save',{items:state.items}).then(function(d){$('itemsMsg').textContent=d.ok?'נשמר ('+d.count+' פריטים)':'השמירה נכשלה';return api('items')})
    .then(function(d){state.items=d.items||[];renderItems()}).catch(function(){$('itemsMsg').textContent='השמירה נכשלה'}).then(function(){b.disabled=false})};
+$('loadSeed').onclick=function(){
+  var b=this,m=$('importMsg');b.disabled=true;m.textContent='טוען...';
+  fetch('seed-items.json').then(function(r){return r.json()}).then(function(seed){
+    var have={};state.items.forEach(function(i){have[String(i.name).trim().toLowerCase()]=1});
+    var added=0;seed.forEach(function(i){if(!have[i.name.toLowerCase()]){state.items.push({name:i.name,sku:i.sku,price:i.price,uses:0,last:0});added++}});
+    renderItems();
+    return api('items-save',{items:state.items}).then(function(d){m.textContent=d.ok?'נוספו '+added+' פריטים ונשמרו. הרשימה מתעדכנת בחיוב הבא.':'השמירה נכשלה'});
+  }).catch(function(){m.textContent='לא הצלחתי לטעון את הקטלוג'}).then(function(){b.disabled=false});
+};
 $('file').addEventListener('change',function(){
   var f=this.files[0];if(!f)return;var msg=$('importMsg');msg.textContent='קורא...';
   var r=new FileReader();
